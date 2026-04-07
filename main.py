@@ -4,15 +4,18 @@ from random import randint, choice
 
 pygame.init()
 
-WIDTH, HEIGHT = 800, 800
+WIDTH, HEIGHT = 1000, 920
 window = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Random Squares")
 
 clock = pygame.time.Clock()
+font = pygame.font.SysFont(None, 28)
 
+
+FRAMERATE = 60
 
 MIN_SIZE, MAX_SIZE = 10, 100
-MAX_SPEED, MIN_SPEED = 8, 1
+MAX_SPEED, MIN_SPEED = 5, 1
 
 
 def random_velocity(size):
@@ -46,7 +49,7 @@ squares = [make_square() for _ in range(10)]
 
 run = True
 while run:
-    clock.tick(60)
+    clock.tick(FRAMERATE)
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -66,6 +69,9 @@ while run:
             sq["vy"] += choice([-1, 0, 1])
 
         pygame.draw.rect(window, sq["color"], sq["rect"])
+
+    fps_text = font.render(f"FPS: {clock.get_fps():.0f}", True, (220, 220, 220))
+    window.blit(fps_text, (WIDTH - fps_text.get_width() - 8, 8))
 
     pygame.display.update()
 
