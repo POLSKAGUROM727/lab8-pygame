@@ -14,19 +14,22 @@ font = pygame.font.SysFont(None, 28)
 
 
 FRAMERATE = 60
-
-MIN_SIZE, MAX_SIZE = 10, 50
+NUM_SQUARES = 30
+MIN_SIZE, MAX_SIZE = 10, 30
 # Speeds are in pixels per second (multiply by 60 to keep the same feel at 60 FPS)
 MAX_SPEED, MIN_SPEED = 5 * 60, 1 * 60
 # Lifespan bounds in seconds
-MIN_LIFESPAN: float = 30.0
-MAX_LIFESPAN: float = 180.0
+MIN_LIFESPAN: float = 3.0
+MAX_LIFESPAN: float = 20.0
 # all the fleeing things
 FLEE_THRESHOLD = 55
 FLEE_RADIUS = 200
 NOISE_STRENGTH = 1.2 * 60
 # Max degrees the velocity vector can rotate per second (wander)
 WANDER_TURN = 5 * 60
+
+pygame.mixer.music.load("DOGsoundtrack.mp3")
+pygame.mixer.music.play(-1)
 
 
 def speed_for_size(size: int) -> float:
@@ -153,11 +156,109 @@ def flee_velocity(small: dict, big_squares: list[dict]) -> tuple[float, float] |
     return flee_impulse.x, flee_impulse.y
 
 
-squares = [make_square() for _ in range(15)]
+def chase_velocity(big: dict, small_squares: list[dict]) -> tuple[float, float] | None:
+    big_center: Vector2 = Vector2(big["rect"].center)
+    attraction: Vector2 = Vector2(0, 0)
+    for small in small_squares:
+        small_center: Vector2 = Vector2(small["rect"].center)
+        diff: Vector2 = small_center - big_center  # ← flipped: pull toward target
+        distance: float = diff.length()
+        if distance == 0:
+            continue
+        if distance > CHASE_RADIUS:
+            continue
+        # Weight attraction by proximity: closer → stronger pull
+        attraction += diff.normalize() * (CHASE_RADIUS - distance)
+    if attraction.length() == 0:
+        return None
+    # Normalise then scale to the square's max speed to get the desired chase direction
+    attraction = attraction.normalize()
+    noise: Vector2 = Vector2(uniform(-1, 1), uniform(-1, 1)) * NOISE_STRENGTH
+    attraction += noise
+    if attraction.length() == 0:
+        attraction = Vector2(1, 0)
+    speed: float = speed_for_size(big["rect"].width)
+    # Return a steering impulse: a fraction of the full chase vector to blend each frame
+    chase_impulse: Vector2 = attraction.normalize() * speed
+    return chase_impulse.x, chase_impulse.y
+
+
+squares: list[dict] = [make_square() for _ in range(NUM_SQUARES)]
 
 # Classify once; squares don't change size
-big_squares = [sq for sq in squares if sq["rect"].width >= FLEE_THRESHOLD]
-small_squares = [sq for sq in squares if sq["rect"].width < FLEE_THRESHOLD]
+big_squares: list[dict] = [sq for sq in squares if sq["rect"].width >= FLEE_THRESHOLD]
+small_squares: list[dict] = [sq for sq in squares if sq["rect"].width < FLEE_THRESHOLD]
+
+# Active visual effects: each is a dict with a type and animation state
+effects: list[dict] = []
+
+
+def spawn_death_effect(sq: dict) -> None:
+    """Flash a shrinking square at the dead square's last position."""
+    effects.append(
+        {
+            "type": "death",
+            "cx": sq["rect"].centerx,
+            "cy": sq["rect"].centery,
+            "color": sq["color"],
+            "size": float(sq["rect"].width),
+            "age": 0.0,
+            "duration": 0.35,  # seconds
+        }
+    )
+
+
+def spawn_rebirth_effect(sq: dict) -> None:
+    """Expand a ring pulse at the newborn square's position."""
+    effects.append(
+        {
+            "type": "rebirth",
+            "cx": sq["rect"].centerx,
+            "cy": sq["rect"].centery,
+            "color": sq["color"],
+            "max_radius": sq["rect"].width * 2.5,
+            "age": 0.0,
+            "duration": 0.45,  # seconds
+        }
+    )
+
+
+def update_and_draw_effects(surface: pygame.Surface, dt: float) -> None:
+    """Advance every active effect and draw it; remove finished effects."""
+    alive: list[dict] = []
+    for fx in effects:
+        fx["age"] += dt
+        t: float = min(fx["age"] / fx["duration"], 1.0)  # 0 → 1 over lifetime
+
+        if fx["type"] == "death":
+            # Shrink from original size to 0; fade alpha 255 → 0
+            current_size: int = max(1, int(fx["size"] * (1.0 - t)))
+            alpha: int = int(255 * (1.0 - t))
+            surf = pygame.Surface((current_size, current_size), pygame.SRCALPHA)
+            r, g, b = fx["color"]
+            surf.fill((r, g, b, alpha))
+            rect = surf.get_rect(center=(fx["cx"], fx["cy"]))
+            surface.blit(surf, rect)
+
+        elif fx["type"] == "rebirth":
+            # Expand ring from 0 to max_radius; fade out towards the end
+            radius: int = max(1, int(fx["max_radius"] * t))
+            alpha = int(255 * (1.0 - t))
+            # Draw a hollow ring using a temporary surface for alpha support
+            diam: int = radius * 2 + 4
+            surf = pygame.Surface((diam, diam), pygame.SRCALPHA)
+            r, g, b = fx["color"]
+            pygame.draw.circle(
+                surf, (r, g, b, alpha), (diam // 2, diam // 2), radius, 3
+            )
+            rect = surf.get_rect(center=(fx["cx"], fx["cy"]))
+            surface.blit(surf, rect)
+
+        if fx["age"] < fx["duration"]:
+            alive.append(fx)
+
+    effects[:] = alive
+
 
 run: bool = True
 while run:
@@ -177,7 +278,9 @@ while run:
         # --- Lifespan: age the square and replace it when it expires ---
         sq["age"] += dt
         if sq["age"] >= sq["lifespan"]:
+            spawn_death_effect(sq)  # ← death flash at old position
             squares[i] = make_square()
+            spawn_rebirth_effect(squares[i])  # ← ring pulse at new position
             any_reborn = True
             continue  # skip the rest of this frame's update for the newborn
 
@@ -227,6 +330,9 @@ while run:
 
     # --- Square-to-square collision resolution ---
     resolve_collisions(squares)
+
+    # --- Draw particle effects (on top of squares) ---
+    update_and_draw_effects(window, dt)
 
     fps_text = font.render(f"FPS: {clock.get_fps():.0f}", True, (220, 220, 220))
     window.blit(fps_text, (WIDTH - fps_text.get_width() - 8, 8))
