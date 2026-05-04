@@ -15,7 +15,7 @@ font = pygame.font.SysFont(None, 28)
 
 FRAMERATE = 60
 NUM_SQUARES = 5
-MIN_SIZE, MAX_SIZE = 25, 25
+MIN_SIZE, MAX_SIZE = 4, 25
 MAX_SPEED, MIN_SPEED = 5 * 60, 1 * 60
 MIN_LIFESPAN: float = 3.0
 MAX_LIFESPAN: float = 20.0
@@ -66,8 +66,6 @@ def random_color() -> tuple[int, int, int]:
 
 
 def make_square() -> dict:
-    # Refactoring: Updated to use dictionary key constants.
-    # This ensures consistency across all square creation and avoids typos.
     size: int = randint(MIN_SIZE, MAX_SIZE)
     x: int = randint(1, max(1, WIDTH - size - 1))
     y: int = randint(1, max(1, HEIGHT - size - 1))
@@ -81,6 +79,29 @@ def make_square() -> dict:
         SQ_AGE: 0.0,
         SQ_LIFESPAN: lifespan,
     }
+
+
+def make_square_with_size(size: int) -> dict:
+    x: int = randint(1, max(1, WIDTH - size - 1))
+    y: int = randint(1, max(1, HEIGHT - size - 1))
+    vx, vy = random_velocity(size)
+    lifespan: float = uniform(MIN_LIFESPAN, MAX_LIFESPAN)
+    return {
+        SQ_RECT: Rect(x, y, size, size),
+        SQ_VX: vx,
+        SQ_VY: vy,
+        SQ_COLOR: random_color(),
+        SQ_AGE: 0.0,
+        SQ_LIFESPAN: lifespan,
+    }
+
+
+# to actually change the amount of squares and the size
+squares: list[dict] = (
+    [make_square_with_size(25) for _ in range(5)]
+    + [make_square_with_size(10) for _ in range(10)]
+    + [make_square_with_size(4) for _ in range(30)]
+)
 
 
 def wander(sq: dict, dt: float) -> None:
@@ -132,8 +153,6 @@ def flee_velocity(small: dict, big_squares: list[dict]) -> tuple[float, float] |
 # Why: Dead code clutters the codebase and confuses readers about what the program actually does.
 # The main loop only uses flee_velocity for small squares avoiding large ones.
 
-
-squares: list[dict] = [make_square() for _ in range(NUM_SQUARES)]
 
 big_squares: list[dict] = [sq for sq in squares if sq[SQ_RECT].width >= FLEE_THRESHOLD]
 small_squares: list[dict] = [sq for sq in squares if sq[SQ_RECT].width < FLEE_THRESHOLD]
