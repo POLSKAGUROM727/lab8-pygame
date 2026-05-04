@@ -65,7 +65,7 @@ def random_color() -> tuple[int, int, int]:
     return (randint(50, 255), randint(50, 255), randint(50, 255))
 
 
-# old function
+# old function to create squares
 def make_square() -> dict:
     size: int = randint(MIN_SIZE, MAX_SIZE)
     x: int = randint(1, max(1, WIDTH - size - 1))
@@ -103,6 +103,28 @@ squares: list[dict] = (
     + [make_square_with_size(10) for _ in range(10)]
     + [make_square_with_size(4) for _ in range(30)]
 )
+
+
+# function to make the squares go to the other end of the screen instead of bouncing off the edge
+def apply_screen_wrap(sq: dict) -> None:
+    size: int = sq[SQ_RECT].width
+    sq[SQ_RECT].x = sq[SQ_RECT].x % WIDTH
+    sq[SQ_RECT].y = sq[SQ_RECT].y % HEIGHT
+
+
+# i dont think its really working in game
+def check_collision(a: dict, b: dict) -> bool:
+    if a[SQ_RECT].colliderect(b[SQ_RECT]):
+        a[SQ_VX], b[SQ_VX] = b[SQ_VX], a[SQ_VX]
+        a[SQ_VY], b[SQ_VY] = b[SQ_VY], a[SQ_VY]
+        return True
+    return False
+
+
+def handle_collisions(squares: list[dict]) -> None:
+    for i in range(len(squares)):
+        for j in range(i + 1, len(squares)):
+            check_collision(squares[i], squares[j])
 
 
 def wander(sq: dict, dt: float) -> None:
@@ -159,13 +181,6 @@ big_squares: list[dict] = [sq for sq in squares if sq[SQ_RECT].width >= FLEE_THR
 small_squares: list[dict] = [sq for sq in squares if sq[SQ_RECT].width < FLEE_THRESHOLD]
 
 effects: list[dict] = []
-
-
-# function to make the squares go to the other end of the screen instead of bouncing off the edge
-def apply_screen_wrap(sq: dict) -> None:
-    size: int = sq[SQ_RECT].width
-    sq[SQ_RECT].x = sq[SQ_RECT].x % WIDTH
-    sq[SQ_RECT].y = sq[SQ_RECT].y % HEIGHT
 
 
 def update_square_state(
