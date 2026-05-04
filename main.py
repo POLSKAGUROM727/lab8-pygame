@@ -161,23 +161,11 @@ small_squares: list[dict] = [sq for sq in squares if sq[SQ_RECT].width < FLEE_TH
 effects: list[dict] = []
 
 
-def apply_boundary_constraints(sq: dict) -> None:
-    # Refactoring: Extracted boundary collision logic into a separate function.
-    # Why: Separates concerns (updating position vs collision response) and makes the main loop clearer.
-    # When a square hits a wall, we clamp its position and reflect its velocity.
-    if sq[SQ_RECT].left <= 0:
-        sq[SQ_RECT].left = 0
-        sq[SQ_VX] = abs(sq[SQ_VX])
-    elif sq[SQ_RECT].right >= WIDTH:
-        sq[SQ_RECT].right = WIDTH
-        sq[SQ_VX] = -abs(sq[SQ_VX])
-
-    if sq[SQ_RECT].top <= 0:
-        sq[SQ_RECT].top = 0
-        sq[SQ_VY] = abs(sq[SQ_VY])
-    elif sq[SQ_RECT].bottom >= HEIGHT:
-        sq[SQ_RECT].bottom = HEIGHT
-        sq[SQ_VY] = -abs(sq[SQ_VY])
+# function to make the squares go to the other end of the screen instead of bouncing off the edge
+def apply_screen_wrap(sq: dict) -> None:
+    size: int = sq[SQ_RECT].width
+    sq[SQ_RECT].x = sq[SQ_RECT].x % WIDTH
+    sq[SQ_RECT].y = sq[SQ_RECT].y % HEIGHT
 
 
 def update_square_state(
@@ -295,8 +283,7 @@ while run:
         if reborn:
             any_reborn = True
         else:
-            # Only apply boundary constraints if square was not reborn (new squares start inside bounds)
-            apply_boundary_constraints(sq)
+            apply_screen_wrap(sq)
             pygame.draw.rect(window, sq[SQ_COLOR], sq[SQ_RECT])
 
     # Refresh big/small square categorization if any squares were reborn
