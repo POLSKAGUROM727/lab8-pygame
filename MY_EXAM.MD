@@ -21,3 +21,9 @@
 What is happening: the trail stays at the old position when wrapping
 
 Fix: check whether the horizontal or vertical distance between two consecutive trail points exceeds half the screen width or height
+
+## Feature: Speed Test
+
+- Assumption: the square moves in a straight line without any outside forces (like the fleeing or wandering feature).
+- Evaluation: measure how far the square travels in exactly one second and compare it to the speed value calculated by
+- Implementation:
