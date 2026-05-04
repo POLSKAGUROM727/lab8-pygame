@@ -65,6 +65,7 @@ def random_color() -> tuple[int, int, int]:
     return (randint(50, 255), randint(50, 255), randint(50, 255))
 
 
+# old function
 def make_square() -> dict:
     size: int = randint(MIN_SIZE, MAX_SIZE)
     x: int = randint(1, max(1, WIDTH - size - 1))
@@ -192,7 +193,7 @@ def update_square_state(
     sq[SQ_AGE] += dt
     if sq[SQ_AGE] >= sq[SQ_LIFESPAN]:
         spawn_effect(sq, "death")
-        squares[i] = make_square()
+        squares[i] = make_square_with_size(size)
         spawn_effect(squares[i], "rebirth")
         return True
 
