@@ -114,17 +114,32 @@ def apply_screen_wrap(sq: dict) -> None:
 
 # i dont think its really working in game
 def check_collision(a: dict, b: dict) -> bool:
-    if a[SQ_RECT].colliderect(b[SQ_RECT]):
-        a[SQ_VX], b[SQ_VX] = b[SQ_VX], a[SQ_VX]
-        a[SQ_VY], b[SQ_VY] = b[SQ_VY], a[SQ_VY]
-        return True
-    return False
+    return a[SQ_RECT].colliderect(b[SQ_RECT])
 
 
-def handle_collisions(squares: list[dict]) -> None:
+def handle_collisions(squares: list[dict]) -> bool:
+    any_eaten: bool = False
     for i in range(len(squares)):
         for j in range(i + 1, len(squares)):
-            check_collision(squares[i], squares[j])
+            a = squares[i]
+            b = squares[j]
+            if check_collision(a, b):
+                size_a = a[SQ_RECT].width
+                size_b = b[SQ_RECT].width
+                if size_a > size_b:
+                    spawn_effect(b, "death")
+                    squares[j] = make_square_with_size(size_b)
+                    spawn_effect(squares[j], "rebirth")
+                    any_eaten = True
+                elif size_b > size_a:
+                    spawn_effect(a, "death")
+                    squares[i] = make_square_with_size(size_a)
+                    spawn_effect(squares[i], "rebirth")
+                    any_eaten = True
+                else:
+                    a[SQ_VX], b[SQ_VX] = b[SQ_VX], a[SQ_VX]
+                    a[SQ_VY], b[SQ_VY] = b[SQ_VY], a[SQ_VY]
+    return any_eaten
 
 
 def wander(sq: dict, dt: float) -> None:
@@ -301,8 +316,9 @@ while run:
             apply_screen_wrap(sq)
             pygame.draw.rect(window, sq[SQ_COLOR], sq[SQ_RECT])
 
-    # Refresh big/small square categorization if any squares were reborn
-    if any_reborn:
+    any_eaten: bool = handle_collisions(squares)
+
+    if any_reborn or any_eaten:
         big_squares = [sq for sq in squares if sq[SQ_RECT].width >= FLEE_THRESHOLD]
         small_squares = [sq for sq in squares if sq[SQ_RECT].width < FLEE_THRESHOLD]
 
