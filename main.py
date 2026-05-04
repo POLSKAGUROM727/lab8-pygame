@@ -23,6 +23,8 @@ FLEE_THRESHOLD = 55
 FLEE_RADIUS = 200
 NOISE_STRENGTH = 1.2 * 60
 WANDER_TURN = 5 * 60
+GROWTH_RATIO: float = 0.25
+MAX_GROWTH_SIZE: int = 80
 
 # Refactoring: Dictionary key constants prevent typos and improve maintainability.
 # Rather than using magic strings like sq["vx"], we use constants so typos are caught at definition time.
@@ -112,9 +114,26 @@ def apply_screen_wrap(sq: dict) -> None:
     sq[SQ_RECT].y = sq[SQ_RECT].y % HEIGHT
 
 
-# i dont think its really working in game
 def check_collision(a: dict, b: dict) -> bool:
     return a[SQ_RECT].colliderect(b[SQ_RECT])
+
+
+def grow_square(sq: dict, prey_size: int) -> None:
+    old_size: int = sq[SQ_RECT].width
+    new_size: int = min(
+        old_size + max(1, int(prey_size * GROWTH_RATIO)), MAX_GROWTH_SIZE
+    )
+    if new_size == old_size:
+        return
+    center = sq[SQ_RECT].center
+    sq[SQ_RECT].width = new_size
+    sq[SQ_RECT].height = new_size
+    sq[SQ_RECT].center = center
+    vel: Vector2 = Vector2(sq[SQ_VX], sq[SQ_VY])
+    if vel.length() > 0:
+        new_speed: float = speed_for_size(new_size)
+        vel = vel.normalize() * new_speed
+        sq[SQ_VX], sq[SQ_VY] = vel.x, vel.y
 
 
 def handle_collisions(squares: list[dict]) -> bool:
@@ -127,11 +146,13 @@ def handle_collisions(squares: list[dict]) -> bool:
                 size_a = a[SQ_RECT].width
                 size_b = b[SQ_RECT].width
                 if size_a > size_b:
+                    grow_square(a, size_b)
                     spawn_effect(b, "death")
                     squares[j] = make_square_with_size(size_b)
                     spawn_effect(squares[j], "rebirth")
                     any_eaten = True
                 elif size_b > size_a:
+                    grow_square(b, size_a)
                     spawn_effect(a, "death")
                     squares[i] = make_square_with_size(size_a)
                     spawn_effect(squares[i], "rebirth")
