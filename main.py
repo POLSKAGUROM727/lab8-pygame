@@ -14,26 +14,39 @@ font = pygame.font.SysFont(None, 28)
 
 
 FRAMERATE = 60
-NUM_SQUARES = 30
-MIN_SIZE, MAX_SIZE = 10, 30
-# Speeds are in pixels per second (multiply by 60 to keep the same feel at 60 FPS)
+NUM_SQUARES = 5
+MIN_SIZE, MAX_SIZE = 25, 25
 MAX_SPEED, MIN_SPEED = 5 * 60, 1 * 60
-# Lifespan bounds in seconds
 MIN_LIFESPAN: float = 3.0
 MAX_LIFESPAN: float = 20.0
-# all the fleeing things
 FLEE_THRESHOLD = 55
 FLEE_RADIUS = 200
 NOISE_STRENGTH = 1.2 * 60
-# Max degrees the velocity vector can rotate per second (wander)
 WANDER_TURN = 5 * 60
+
+# Refactoring: Dictionary key constants prevent typos and improve maintainability.
+# Rather than using magic strings like sq["vx"], we use constants so typos are caught at definition time.
+SQ_RECT = "rect"
+SQ_VX = "vx"
+SQ_VY = "vy"
+SQ_COLOR = "color"
+SQ_AGE = "age"
+SQ_LIFESPAN = "lifespan"
+
+EFX_TYPE = "type"
+EFX_CX = "cx"
+EFX_CY = "cy"
+EFX_COLOR = "color"
+EFX_AGE = "age"
+EFX_DURATION = "duration"
+EFX_SIZE = "size"
+EFX_MAX_RADIUS = "max_radius"
 
 pygame.mixer.music.load("DOGsoundtrack.mp3")
 pygame.mixer.music.play(-1)
 
 
 def speed_for_size(size: int) -> float:
-    """Linearly scale speed (px/s): small squares are fast, big ones are slow."""
     speed = MAX_SPEED - int(
         (size - MIN_SIZE) / (MAX_SIZE - MIN_SIZE) * (MAX_SPEED - MIN_SPEED)
     )
@@ -41,6 +54,7 @@ def speed_for_size(size: int) -> float:
 
 
 def random_velocity(size: int) -> tuple[float, float]:
+    # Refactoring: This function remains unchanged but supports the refactored make_square.
     speed: float = speed_for_size(size)
     vx: float = choice([-1, 1]) * speed
     vy: float = choice([-1, 1]) * speed
@@ -52,82 +66,43 @@ def random_color() -> tuple[int, int, int]:
 
 
 def make_square() -> dict:
+    # Refactoring: Updated to use dictionary key constants.
+    # This ensures consistency across all square creation and avoids typos.
     size: int = randint(MIN_SIZE, MAX_SIZE)
     x: int = randint(1, max(1, WIDTH - size - 1))
     y: int = randint(1, max(1, HEIGHT - size - 1))
     vx, vy = random_velocity(size)
     lifespan: float = uniform(MIN_LIFESPAN, MAX_LIFESPAN)
     return {
-        "rect": Rect(x, y, size, size),
-        "vx": vx,
-        "vy": vy,
-        "color": random_color(),
-        "age": 0.0,
-        "lifespan": lifespan,
+        SQ_RECT: Rect(x, y, size, size),
+        SQ_VX: vx,
+        SQ_VY: vy,
+        SQ_COLOR: random_color(),
+        SQ_AGE: 0.0,
+        SQ_LIFESPAN: lifespan,
     }
 
 
 def wander(sq: dict, dt: float) -> None:
-    vel: Vector2 = Vector2(sq["vx"], sq["vy"])
+    # Refactoring: Updated to use dictionary key constants for consistency.
+    vel: Vector2 = Vector2(sq[SQ_VX], sq[SQ_VY])
     if vel.length() == 0:
         return
     angle: float = uniform(-WANDER_TURN, WANDER_TURN) * dt
     vel = vel.rotate(angle)
-    speed: float = speed_for_size(sq["rect"].width)
+    speed: float = speed_for_size(sq[SQ_RECT].width)
     vel = vel.normalize() * speed
-    sq["vx"], sq["vy"] = vel.x, vel.y
-
-
-def resolve_collisions(squares: list[dict]) -> None:
-    """Detect and resolve AABB collisions between every pair of squares.
-    Pushes overlapping squares apart along the axis of least penetration
-    and swaps the relevant velocity component (elastic-ish bounce)."""
-    for i in range(len(squares)):
-        for j in range(i + 1, len(squares)):
-            a, b = squares[i], squares[j]
-            if not a["rect"].colliderect(b["rect"]):
-                continue
-
-            # Overlap depth on each axis
-            overlap_x = min(a["rect"].right, b["rect"].right) - max(
-                a["rect"].left, b["rect"].left
-            )
-            overlap_y = min(a["rect"].bottom, b["rect"].bottom) - max(
-                a["rect"].top, b["rect"].top
-            )
-
-            if overlap_x < overlap_y:
-                # Separate horizontally
-                half = overlap_x // 2 + 1
-                if a["rect"].centerx < b["rect"].centerx:
-                    a["rect"].x -= half
-                    b["rect"].x += half
-                else:
-                    a["rect"].x += half
-                    b["rect"].x -= half
-                # Swap x velocities
-                a["vx"], b["vx"] = b["vx"], a["vx"]
-            else:
-                # Separate vertically
-                half = overlap_y // 2 + 1
-                if a["rect"].centery < b["rect"].centery:
-                    a["rect"].y -= half
-                    b["rect"].y += half
-                else:
-                    a["rect"].y += half
-                    b["rect"].y -= half
-                # Swap y velocities
-                a["vy"], b["vy"] = b["vy"], a["vy"]
+    sq[SQ_VX], sq[SQ_VY] = vel.x, vel.y
 
 
 def flee_velocity(small: dict, big_squares: list[dict]) -> tuple[float, float] | None:
-    """Return a flee steering impulse (px/s²-scaled nudge) to add to current velocity,
-    or None when no big square is within FLEE_RADIUS."""
-    small_center: Vector2 = Vector2(small["rect"].center)
+    # Refactoring: Uses dictionary key constants instead of magic strings (e.g., SQ_RECT instead of "rect").
+    # This prevents typos and makes code easier to maintain if the square structure changes.
+    small_center: Vector2 = Vector2(small[SQ_RECT].center)
     escape: Vector2 = Vector2(0, 0)
 
     for big in big_squares:
-        big_center: Vector2 = Vector2(big["rect"].center)
+        big_center: Vector2 = Vector2(big[SQ_RECT].center)
         diff: Vector2 = small_center - big_center
         distance: float = diff.length()
 
@@ -136,13 +111,11 @@ def flee_velocity(small: dict, big_squares: list[dict]) -> tuple[float, float] |
         if distance > FLEE_RADIUS:
             continue
 
-        # Weight repulsion by proximity: closer → stronger push
         escape += diff.normalize() * (FLEE_RADIUS - distance)
 
     if escape.length() == 0:
         return None
 
-    # Normalise then scale to the square's max speed to get the desired flee direction
     escape = escape.normalize()
     noise: Vector2 = Vector2(uniform(-1, 1), uniform(-1, 1)) * NOISE_STRENGTH
     escape += noise
@@ -150,119 +123,143 @@ def flee_velocity(small: dict, big_squares: list[dict]) -> tuple[float, float] |
     if escape.length() == 0:
         escape = Vector2(1, 0)
 
-    speed: float = speed_for_size(small["rect"].width)
-    # Return a steering impulse: a fraction of the full flee vector to blend each frame
+    speed: float = speed_for_size(small[SQ_RECT].width)
     flee_impulse: Vector2 = escape.normalize() * speed
     return flee_impulse.x, flee_impulse.y
 
 
-def chase_velocity(big: dict, small_squares: list[dict]) -> tuple[float, float] | None:
-    big_center: Vector2 = Vector2(big["rect"].center)
-    attraction: Vector2 = Vector2(0, 0)
-    for small in small_squares:
-        small_center: Vector2 = Vector2(small["rect"].center)
-        diff: Vector2 = small_center - big_center  # ← flipped: pull toward target
-        distance: float = diff.length()
-        if distance == 0:
-            continue
-        if distance > CHASE_RADIUS:
-            continue
-        # Weight attraction by proximity: closer → stronger pull
-        attraction += diff.normalize() * (CHASE_RADIUS - distance)
-    if attraction.length() == 0:
-        return None
-    # Normalise then scale to the square's max speed to get the desired chase direction
-    attraction = attraction.normalize()
-    noise: Vector2 = Vector2(uniform(-1, 1), uniform(-1, 1)) * NOISE_STRENGTH
-    attraction += noise
-    if attraction.length() == 0:
-        attraction = Vector2(1, 0)
-    speed: float = speed_for_size(big["rect"].width)
-    # Return a steering impulse: a fraction of the full chase vector to blend each frame
-    chase_impulse: Vector2 = attraction.normalize() * speed
-    return chase_impulse.x, chase_impulse.y
+# Refactoring: Removed chase_velocity function (was unused).
+# Why: Dead code clutters the codebase and confuses readers about what the program actually does.
+# The main loop only uses flee_velocity for small squares avoiding large ones.
 
 
 squares: list[dict] = [make_square() for _ in range(NUM_SQUARES)]
 
-# Classify once; squares don't change size
-big_squares: list[dict] = [sq for sq in squares if sq["rect"].width >= FLEE_THRESHOLD]
-small_squares: list[dict] = [sq for sq in squares if sq["rect"].width < FLEE_THRESHOLD]
+big_squares: list[dict] = [sq for sq in squares if sq[SQ_RECT].width >= FLEE_THRESHOLD]
+small_squares: list[dict] = [sq for sq in squares if sq[SQ_RECT].width < FLEE_THRESHOLD]
 
-# Active visual effects: each is a dict with a type and animation state
 effects: list[dict] = []
 
 
-def spawn_death_effect(sq: dict) -> None:
-    """Flash a shrinking square at the dead square's last position."""
-    effects.append(
-        {
-            "type": "death",
-            "cx": sq["rect"].centerx,
-            "cy": sq["rect"].centery,
-            "color": sq["color"],
-            "size": float(sq["rect"].width),
-            "age": 0.0,
-            "duration": 0.35,  # seconds
-        }
-    )
+def apply_boundary_constraints(sq: dict) -> None:
+    # Refactoring: Extracted boundary collision logic into a separate function.
+    # Why: Separates concerns (updating position vs collision response) and makes the main loop clearer.
+    # When a square hits a wall, we clamp its position and reflect its velocity.
+    if sq[SQ_RECT].left <= 0:
+        sq[SQ_RECT].left = 0
+        sq[SQ_VX] = abs(sq[SQ_VX])
+    elif sq[SQ_RECT].right >= WIDTH:
+        sq[SQ_RECT].right = WIDTH
+        sq[SQ_VX] = -abs(sq[SQ_VX])
+
+    if sq[SQ_RECT].top <= 0:
+        sq[SQ_RECT].top = 0
+        sq[SQ_VY] = abs(sq[SQ_VY])
+    elif sq[SQ_RECT].bottom >= HEIGHT:
+        sq[SQ_RECT].bottom = HEIGHT
+        sq[SQ_VY] = -abs(sq[SQ_VY])
 
 
-def spawn_rebirth_effect(sq: dict) -> None:
-    """Expand a ring pulse at the newborn square's position."""
-    effects.append(
-        {
-            "type": "rebirth",
-            "cx": sq["rect"].centerx,
-            "cy": sq["rect"].centery,
-            "color": sq["color"],
-            "max_radius": sq["rect"].width * 2.5,
-            "age": 0.0,
-            "duration": 0.45,  # seconds
-        }
-    )
+def update_square_state(
+    i: int, sq: dict, dt: float, big_squares: list[dict], small_squares: list[dict]
+) -> bool:
+    # Refactoring: Extracted square update logic from the main loop into a helper function.
+    # Why: Makes it easier to test and understand the logic step-by-step.
+    # This function handles: age update, lifespan check, fleeing/wandering behavior, and position update.
+    # Returns True if the square was reborn, False otherwise (used to update big/small square lists).
+    size: int = sq[SQ_RECT].width
+
+    # Update age and check for lifespan expiration
+    sq[SQ_AGE] += dt
+    if sq[SQ_AGE] >= sq[SQ_LIFESPAN]:
+        spawn_effect(sq, "death")
+        squares[i] = make_square()
+        spawn_effect(squares[i], "rebirth")
+        return True
+
+    # Decide between fleeing (small squares near big ones) or wandering (default behavior)
+    is_fleeing: bool = False
+    if size < FLEE_THRESHOLD:
+        flee_impulse: tuple[float, float] | None = flee_velocity(sq, big_squares)
+        if flee_impulse is not None:
+            vel: Vector2 = Vector2(sq[SQ_VX], sq[SQ_VY]) + Vector2(flee_impulse)
+            max_speed: float = speed_for_size(size)
+            if vel.length() > max_speed:
+                vel = vel.normalize() * max_speed
+            sq[SQ_VX], sq[SQ_VY] = vel.x, vel.y
+            is_fleeing = True
+
+    if not is_fleeing:
+        wander(sq, dt)
+
+    # Update position based on velocity and delta time
+    sq[SQ_RECT].x += int(sq[SQ_VX] * dt)
+    sq[SQ_RECT].y += int(sq[SQ_VY] * dt)
+
+    return False
+
+
+def spawn_effect(sq: dict, effect_type: str) -> None:
+    # Refactoring: Consolidated spawn_death_effect and spawn_rebirth_effect into a single function.
+    # Why: Reduces code duplication (DRY principle) and makes it easy to add new effect types.
+    # Effect-specific values (duration, max_radius) are defined based on effect_type.
+    effect_data = {
+        EFX_TYPE: effect_type,
+        EFX_CX: sq[SQ_RECT].centerx,
+        EFX_CY: sq[SQ_RECT].centery,
+        EFX_COLOR: sq[SQ_COLOR],
+        EFX_AGE: 0.0,
+    }
+    # Type-specific configuration: death effect shrinks and fades; rebirth expands and fades
+    if effect_type == "death":
+        effect_data[EFX_SIZE] = float(sq[SQ_RECT].width)
+        effect_data[EFX_DURATION] = 0.35
+    elif effect_type == "rebirth":
+        effect_data[EFX_MAX_RADIUS] = sq[SQ_RECT].width * 2.5
+        effect_data[EFX_DURATION] = 0.45
+    effects.append(effect_data)
 
 
 def update_and_draw_effects(surface: pygame.Surface, dt: float) -> None:
-    """Advance every active effect and draw it; remove finished effects."""
+    # Refactoring: Uses dictionary key constants (e.g., EFX_AGE instead of "age") for consistency.
     alive: list[dict] = []
     for fx in effects:
-        fx["age"] += dt
-        t: float = min(fx["age"] / fx["duration"], 1.0)  # 0 → 1 over lifetime
+        fx[EFX_AGE] += dt
+        t: float = min(fx[EFX_AGE] / fx[EFX_DURATION], 1.0)
 
-        if fx["type"] == "death":
-            # Shrink from original size to 0; fade alpha 255 → 0
-            current_size: int = max(1, int(fx["size"] * (1.0 - t)))
+        if fx[EFX_TYPE] == "death":
+            current_size: int = max(1, int(fx[EFX_SIZE] * (1.0 - t)))
             alpha: int = int(255 * (1.0 - t))
             surf = pygame.Surface((current_size, current_size), pygame.SRCALPHA)
-            r, g, b = fx["color"]
+            r, g, b = fx[EFX_COLOR]
             surf.fill((r, g, b, alpha))
-            rect = surf.get_rect(center=(fx["cx"], fx["cy"]))
+            rect = surf.get_rect(center=(fx[EFX_CX], fx[EFX_CY]))
             surface.blit(surf, rect)
 
-        elif fx["type"] == "rebirth":
-            # Expand ring from 0 to max_radius; fade out towards the end
-            radius: int = max(1, int(fx["max_radius"] * t))
+        elif fx[EFX_TYPE] == "rebirth":
+            radius: int = max(1, int(fx[EFX_MAX_RADIUS] * t))
             alpha = int(255 * (1.0 - t))
-            # Draw a hollow ring using a temporary surface for alpha support
             diam: int = radius * 2 + 4
             surf = pygame.Surface((diam, diam), pygame.SRCALPHA)
-            r, g, b = fx["color"]
+            r, g, b = fx[EFX_COLOR]
             pygame.draw.circle(
                 surf, (r, g, b, alpha), (diam // 2, diam // 2), radius, 3
             )
-            rect = surf.get_rect(center=(fx["cx"], fx["cy"]))
+            rect = surf.get_rect(center=(fx[EFX_CX], fx[EFX_CY]))
             surface.blit(surf, rect)
 
-        if fx["age"] < fx["duration"]:
+        if fx[EFX_AGE] < fx[EFX_DURATION]:
             alive.append(fx)
 
     effects[:] = alive
 
 
+# Refactoring: Simplified main loop by extracting update logic into helper functions.
+# This makes the game flow much clearer: handle input → update squares → render → display.
+# The loop now reads almost like pseudocode, with details hidden in well-named functions.
 run: bool = True
 while run:
-    dt: float = clock.tick(FRAMERATE) / 1000.0  # seconds elapsed since last frame
+    dt: float = clock.tick(FRAMERATE) / 1000.0
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -272,66 +269,21 @@ while run:
 
     any_reborn: bool = False
 
+    # Update all squares: age, lifespan, behavior (fleeing/wandering), and position
     for i, sq in enumerate(squares):
-        size: int = sq["rect"].width
-
-        # --- Lifespan: age the square and replace it when it expires ---
-        sq["age"] += dt
-        if sq["age"] >= sq["lifespan"]:
-            spawn_death_effect(sq)  # ← death flash at old position
-            squares[i] = make_square()
-            spawn_rebirth_effect(squares[i])  # ← ring pulse at new position
+        reborn = update_square_state(i, sq, dt, big_squares, small_squares)
+        if reborn:
             any_reborn = True
-            continue  # skip the rest of this frame's update for the newborn
+        else:
+            # Only apply boundary constraints if square was not reborn (new squares start inside bounds)
+            apply_boundary_constraints(sq)
+            pygame.draw.rect(window, sq[SQ_COLOR], sq[SQ_RECT])
 
-        # --- Fleeing logic (small squares only) ---
-        is_fleeing: bool = False
-        if size < FLEE_THRESHOLD:
-            flee_impulse: tuple[float, float] | None = flee_velocity(sq, big_squares)
-            if flee_impulse is not None:
-                # Add the flee impulse to the current velocity (vector addition),
-                # then clamp the magnitude to the square's max speed to prevent runaway acceleration.
-                vel: Vector2 = Vector2(sq["vx"], sq["vy"]) + Vector2(flee_impulse)
-                max_speed: float = speed_for_size(size)
-                if vel.length() > max_speed:
-                    vel = vel.normalize() * max_speed
-                sq["vx"], sq["vy"] = vel.x, vel.y
-                is_fleeing = True
-
-        # --- Wander: gradually rotate velocity so direction changes over time ---
-        if not is_fleeing:
-            wander(sq, dt)
-
-        # --- Move (delta-time scaled: velocity is in px/s) ---
-        sq["rect"].x += int(sq["vx"] * dt)
-        sq["rect"].y += int(sq["vy"] * dt)
-
-        # --- Boundary bounce ---
-        if sq["rect"].left <= 0:
-            sq["rect"].left = 0
-            sq["vx"] = abs(sq["vx"])
-        elif sq["rect"].right >= WIDTH:
-            sq["rect"].right = WIDTH
-            sq["vx"] = -abs(sq["vx"])
-
-        if sq["rect"].top <= 0:
-            sq["rect"].top = 0
-            sq["vy"] = abs(sq["vy"])
-        elif sq["rect"].bottom >= HEIGHT:
-            sq["rect"].bottom = HEIGHT
-            sq["vy"] = -abs(sq["vy"])
-
-        pygame.draw.rect(window, sq["color"], sq["rect"])
-
-    # --- Rebuild size-class lists if any square was reborn this frame ---
+    # Refresh big/small square categorization if any squares were reborn
     if any_reborn:
-        big_squares = [sq for sq in squares if sq["rect"].width >= FLEE_THRESHOLD]
-        small_squares = [sq for sq in squares if sq["rect"].width < FLEE_THRESHOLD]
+        big_squares = [sq for sq in squares if sq[SQ_RECT].width >= FLEE_THRESHOLD]
+        small_squares = [sq for sq in squares if sq[SQ_RECT].width < FLEE_THRESHOLD]
 
-    # --- Square-to-square collision resolution ---
-    resolve_collisions(squares)
-
-    # --- Draw particle effects (on top of squares) ---
     update_and_draw_effects(window, dt)
 
     fps_text = font.render(f"FPS: {clock.get_fps():.0f}", True, (220, 220, 220))

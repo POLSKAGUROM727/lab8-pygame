@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture Documentation</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2 { color: #333; }
+        pre { background: #f4f4f4; padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Architecture Documentation</h1>
+    <p>This document provides an overview of the architecture of the Pygame-based "Random Squares" simulation project.</p>
+
+    <h2>Dependency Graph</h2>
+    <p>The project consists of a single Python file with the following module dependencies:</p>
+    <div class="mermaid">
+graph TD
+    A["main.py"] --> B["pygame"]
+    A --> C["random"]
+    A --> D["pygame.math"]
+    </div>
+
+    <h2>High-Level System/Runtime Flow</h2>
+    <p>The application follows a standard Pygame event loop structure:</p>
+    <div class="mermaid">
+graph TD
+    A["Initialize Pygame"] --> B["Create Window and Set Caption"]
+    B --> C["Load and Play Background Music"]
+    C --> D["Generate Initial Squares"]
+    D --> E["Main Game Loop"]
+    E --> F["Handle Quit Events"]
+    F --> G["Update Square States"]
+    G --> H["Render Squares"]
+    H --> I["Update and Render Effects"]
+    I --> J["Display FPS Counter"]
+    J --> K["Update Display"]
+    K --> E
+    </div>
+
+    <h2>Function-Level Call Graph</h2>
+    <p>The main loop invokes several functions to manage square behavior and effects:</p>
+    <div class="mermaid">
+graph TD
+    A["Main Loop"] --> B["make_square"]
+    A --> C["flee_velocity"]
+    C --> D["speed_for_size"]
+    A --> E["wander"]
+    E --> F["speed_for_size"]
+    A --> G["spawn_death_effect"]
+    A --> H["spawn_rebirth_effect"]
+    A --> I["update_and_draw_effects"]
+    I --> J["pygame.Surface operations"]
+    I --> K["pygame.draw operations"]
+    </div>
+    <p>Note: The <code>chase_velocity</code> function is defined but not currently used in the main loop.</p>
+
+    <h2>Sequence Diagram for Primary Execution Path</h2>
+    <p>The following sequence diagram illustrates the primary execution flow from initialization to the main game loop:</p>
+    <div class="mermaid">
+sequenceDiagram
+    participant M as "main.py"
+    participant P as "Pygame"
+    participant R as "Random"
+
+    M->>P: pygame.init()
+    M->>P: pygame.display.set_mode()
+    M->>P: pygame.display.set_caption()
+    M->>P: pygame.mixer.music.load()
+    M->>P: pygame.mixer.music.play()
+    loop For each square
+        M->>R: randint() for position, size, color
+        M->>R: uniform() for lifespan
+        M->>M: make_square()
+    end
+    M->>M: Categorize big/small squares
+
+    loop Main Loop
+        M->>P: clock.tick()
+        M->>P: pygame.event.get()
+        alt Quit Event
+            M->>M: Set run = False
+        end
+        M->>P: window.fill()
+        loop For each square
+            M->>M: Update age
+            alt Age >= lifespan
+                M->>M: spawn_death_effect()
+                M->>R: Generate new square
+                M->>M: spawn_rebirth_effect()
+            else
+                alt Small square
+                    M->>M: flee_velocity()
+                    M->>M: Update velocity
+                else
+                    M->>M: wander()
+                end
+                M->>M: Move square
+                M->>M: Boundary checks
+            end
+            M->>P: pygame.draw.rect()
+        end
+        M->>M: update_and_draw_effects()
+        M->>P: font.render() FPS
+        M->>P: window.blit()
+        M->>P: pygame.display.update()
+    end
+    M->>P: pygame.quit()
+    </div>
+</body>
+</html></content>
+<parameter name="filePath">c:\Users\polak\Documents\GitHub\lab8-pygame\docs\architecture.html
