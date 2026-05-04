@@ -1,4 +1,5 @@
 import pygame
+from collections import deque
 from pygame.locals import Rect
 from pygame.math import Vector2
 from random import randint, choice, uniform
@@ -25,6 +26,7 @@ NOISE_STRENGTH = 1.2 * 60
 WANDER_TURN = 5 * 60
 GROWTH_RATIO: float = 0.25
 MAX_GROWTH_SIZE: int = 80
+TRAILS_LENGTH: int = 30
 
 # Refactoring: Dictionary key constants prevent typos and improve maintainability.
 # Rather than using magic strings like sq["vx"], we use constants so typos are caught at definition time.
@@ -34,6 +36,7 @@ SQ_VY = "vy"
 SQ_COLOR = "color"
 SQ_AGE = "age"
 SQ_LIFESPAN = "lifespan"
+SQ_TRAIL = "trail"
 
 EFX_TYPE = "type"
 EFX_CX = "cx"
@@ -96,6 +99,7 @@ def make_square_with_size(size: int) -> dict:
         SQ_COLOR: random_color(),
         SQ_AGE: 0.0,
         SQ_LIFESPAN: lifespan,
+        SQ_TRAIL: deque(maxlen=TRAILS_LENGTH),
     }
 
 
@@ -109,9 +113,24 @@ squares: list[dict] = (
 
 # function to make the squares go to the other end of the screen instead of bouncing off the edge
 def apply_screen_wrap(sq: dict) -> None:
-    size: int = sq[SQ_RECT].width
     sq[SQ_RECT].x = sq[SQ_RECT].x % WIDTH
     sq[SQ_RECT].y = sq[SQ_RECT].y % HEIGHT
+
+
+def draw_trail(surface: pygame.Surface, sq: dict) -> None:
+    trail = sq[SQ_TRAIL]
+    if len(trail) < 2:
+        return
+    r, g, b = sq[SQ_COLOR]
+    points = list(trail)
+    for k in range(1, len(points)):
+        px, py = points[k - 1]
+        cx, cy = points[k]
+        if abs(cx - px) > WIDTH // 2 or abs(cy - py) > HEIGHT // 2:
+            continue
+        alpha = int(200 * k / len(points))
+        color = (max(0, r - alpha), max(0, g - alpha), max(0, b - alpha))
+        pygame.draw.line(surface, color, (px, py), (cx, cy), 1)
 
 
 def check_collision(a: dict, b: dict) -> bool:
@@ -335,6 +354,8 @@ while run:
             any_reborn = True
         else:
             apply_screen_wrap(sq)
+            sq[SQ_TRAIL].append(sq[SQ_RECT].center)
+            draw_trail(window, sq)
             pygame.draw.rect(window, sq[SQ_COLOR], sq[SQ_RECT])
 
     any_eaten: bool = handle_collisions(squares)
